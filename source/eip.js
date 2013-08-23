@@ -1,229 +1,318 @@
 /**
  * EIP
  *
- * @version      1.1
+ * @version      1.2.0-beta
  * @author       nori (norimania@gmail.com)
+ * @author       hokaccha (k.hokamura@gmail.com)
  * @copyright    5509 (http://5509.me/)
  * @license      The MIT License
  * @link         https://github.com/5509/EIP
  *
- * 2012-02-22 02:03
  */
 ;(function($, undefined) {
 
   $.fn.eip = function(option) {
     option = $.extend({
-      defaultLabel: "Click here to edit",
-      buttons: true,
-      submitLabel: "Save",
-      cancelLabel: "Cancel",
-      onsubmit: null
+      placeholder: 'Click here to edit',
+      submitLabel: 'Save',
+      cancelLabel: 'Cancel'
     }, option);
+
     return this.each(function() {
       new EIP($(this), option);
     });
   };
 
-  // EIP
-  function EIP(elm, option) {
+  var STATE = {
+    VIEW: 1,
+    EDIT: 2
+  };
+  var RE_DATA_ATTR = /^data-eip-attr-(.+)$/;
+
+  function EIP($el, option) {
+    this.$el = $el;
     this.option = option;
-    this.$defaultLabel = $("<span>")
-      .addClass('eip-default')
-      .text(elm.attr("data-eip-default") || option.defaultLabel);
-    this.eipType = elm.attr("data-eip");
-    if (elm.attr("data-eip-value") === undefined) {
-      elm.attr("data-eip-value", elm.html());
+    this.typeName = this.data('type');
+    this.type = EIP.types[this.typeName] || EIP.types['default'];
+    this.currentState = STATE.VIEW;
+
+    this._initHolder();
+    this._initForm();
+    this.type.init(this);
+
+    this.$el.empty().append(this.$holder, this.$form);
+    this.$el.data('eip', this);
+  }
+
+  EIP.prototype._initHolder = function() {
+    var self = this;
+
+    this.$holder = $('<div>').addClass('eip-holder');
+    this.$holder.html(this.$el.html());
+
+    var text = this.data('placeholder') || this.option.placeholder;
+    this.$placeholder = $('<span>').addClass('eip-placeholder').text(text);
+
+    if (!this.$holder.text()) {
+      this.$holder.append(this.$placeholder);
     }
-    this.$elm = elm;
-    this.$holder = $("<div></div>", {
-        "class": "eip-holder"
+
+    this.$holder.click(function() {
+      self.clickHolder();
+    });
+  };
+
+  EIP.prototype._initForm = function() {
+    var self = this;
+
+    this.$form = $('<form>').addClass('eip-form').hide();
+    this.$input = $('<div>').addClass('eip-input');
+    this.$save = $('<input type="submit">')
+      .addClass('eip-save')
+      .val(this.option.submitLabel);
+    this.$cancel = $('<input type="button">')
+      .addClass('eip-cancel')
+      .val(this.option.cancelLabel);
+    this.$buttons = $('<div>')
+      .addClass('eip-buttons')
+      .append(this.$save, this.$cancel);
+
+    this.$form.submit(function(e) {
+      e.preventDefault();
+      self.submit();
+    });
+
+    this.$cancel.click(function(e) {
+      self.cancel();
+    });
+
+    this.$form.append(this.$input, this.$buttons);
+  };
+
+  EIP.prototype.replaceToForm = function() {
+    var self = this;
+
+    this.changeStateToEdit();
+    this.$holder.hide();
+    this.$form.show();
+
+    // delay for buttons transition
+    setTimeout(function() {
+      self.$buttons.addClass('eip-buttons-show');
+    }, 0);
+
+    this.type.renderForm(this);
+  };
+
+  EIP.prototype.replaceToHolder = function(cancel) {
+    this.changeStateToView();
+    this.$form.hide();
+    this.$holder.show();
+    this.$buttons.removeClass('eip-buttons-show');
+
+    if (!cancel) {
+      this.type.renderHolder(this);
+    }
+  };
+
+  EIP.prototype.clickHolder = function() {
+    var event = $.Event('eip:replaceedit');
+    this.$el.trigger(event, this);
+
+    if (!event.isDefaultPrevented()) {
+      this.replaceToForm();
+    }
+  };
+
+  EIP.prototype.submit = function() {
+    var event = $.Event('eip:submit');
+    this.$el.trigger(event, this);
+
+    if (!event.isDefaultPrevented()) {
+      this.replaceToHolder();
+    }
+  };
+
+  EIP.prototype.cancel = function() {
+    this.replaceToHolder(true);
+  };
+
+  EIP.prototype.changeStateToEdit = function() {
+    this.currentState = STATE.VIEW;
+  };
+
+  EIP.prototype.changeStateToView = function() {
+    this.currentState = STATE.EDIT;
+  };
+
+  EIP.prototype.isViewState = function() {
+    return this.currentState === STATE.VIEW;
+  };
+
+  EIP.prototype.isEditState = function() {
+    return this.currentState === STATE.EDIT;
+  };
+
+  EIP.prototype.data = function(name, val) {
+    return this.$el.attr('data-eip-' + name);
+  };
+
+  EIP.prototype.getInputAttrs = function(attrs) {
+    var name = this.data('name');
+
+    return $.extend({ name: name }, this.getDataAttrs(), attrs);
+  };
+
+  EIP.prototype.getDataAttrs = function() {
+    var ret = {};
+    var attrs = this.$el.get(0).attributes;
+    var attr, name, m;
+    for (var i = 0, len = attrs.length; i < len; i++) {
+      attr = attrs[i];
+      name = attr.name;
+      m = name.match(RE_DATA_ATTR);
+      if (m) {
+        ret[m[1]] = attr.value;
+      }
+    }
+    return ret;
+  };
+
+  EIP.prototype.hasPlaceholder = function() {
+    return this.$holder.find(this.$placeholder).length !== 0;
+  };
+
+  EIP.prototype.getHolderText = function() {
+    return this.hasPlaceholder() ? '' : this.$holder.text();
+  };
+
+  EIP.prototype.getHolderHtml = function() {
+    return this.hasPlaceholder() ? '' : this.$holder.html();
+  };
+
+  EIP.prototype.setHolder = function(val) {
+    if (val) {
+      this.$holder.text(val);
+    }
+    else {
+      this.$holder.html(this.$placeholder);
+    }
+  };
+
+  EIP.prototype.eachDatalist = function(fn) {
+    var datalist = $.parseJSON(this.data('datalist'));
+    $.each(datalist, function(i, val) {
+      var key = val;
+
+      if ($.isArray(val)) {
+        key = val[0];
+        val = val[1];
+      }
+
+      fn(key, val);
+    });
+  };
+
+
+  EIP.types = {};
+
+  EIP.defineType = function(name, funcs) {
+    EIP.types[name] = funcs;
+  };
+
+  EIP.defineType('default', {
+    init: function(eip) {
+      var attrs = eip.getInputAttrs({ type: eip.typeName || 'text' });
+      eip.$input.append($('<input>').attr(attrs));
+    },
+    renderHolder: function(eip) {
+      var val = eip.$input.find('input').val();
+      eip.setHolder(val);
+    },
+    renderForm: function(eip) {
+      var val = eip.getHolderText();
+      eip.$input.find('input').val(val).focus();
+    }
+  });
+
+  EIP.defineType('textarea', {
+    init: function(eip) {
+      var attrs = eip.getInputAttrs();
+      eip.$input.append($('<textarea>').attr(attrs));
+    },
+    renderHolder: function(eip) {
+      var val = eip.$input.find('textarea').val();
+      eip.setHolder(val);
+    },
+    renderForm: function(eip) {
+      var val = eip.getHolderText();
+      eip.$input.find('textarea').val(val).focus();
+    }
+  });
+
+  EIP.defineType('select', {
+    init: function(eip) {
+      var attrs = eip.getInputAttrs();
+      var $select = $('<select>').attr(attrs);
+
+      eip.eachDatalist(function(key, val) {
+        var $option = $('<option>').attr('value', key).text(val);
+        $select.append($option);
       });
-    this.$form = $("<form></form>");
 
-    switch ( this.eipType ) {
-    case "textarea":
-      this.$input = $("<textarea></textarea>", {
-          rows: elm.attr("data-eip-rows") || 10,
-          "class": "eip-input",
-          name: elm.attr("data-eip-name")
-        });
-      break;
-    case "select":
-      this.$input = $("<select></select>", {
-          "class": "eip-input",
-          name: elm.attr("data-eip-name")
-        }).html(
-          (function() {
-            var _options = $.parseJSON(elm.attr("data-eip-option")),
-              _i = 0,
-              _returnOpt = "";
-            if ($.isArray(_options)) {
-              for ( ; _i < _options.length; _i++ ) {
-                _returnOpt += "<option value='" + _options[_i] + "'>" + _options[_i] + "</option>";
-              }
-            }
-            else {
-              $.each(_options, function(key, val) {
-                _returnOpt += "<option value='" + key + "'>" + val + "</option>";
-              });
-            }
-            return _returnOpt;
-          }())
-        );
-      elm.attr("data-eip-value", this.$input.val());
-      break;
-    default:
-      this.$input = $("<input>", {
-          type: this.eipType || "text",
-          "class": "eip-input",
-          name: elm.attr("data-eip-name")
-        });
-      break;
+      eip.$input.append($select);
+    },
+    renderHolder: function(eip) {
+      var $selected = eip.$input.find('option:selected');
+      var text = $selected.text();
+
+      if (!$selected.attr('value')) {
+        text = null;
+      }
+
+      eip.setHolder(text);
+    },
+    renderForm: function(eip) {
+      var val = eip.getHolderHtml();
+      eip.$input.find('option').each(function() {
+        var $option = $(this);
+        if ($.trim($option.html()) === $.trim(val)) {
+          $option.prop('selected', true);
+          return false;
+        }
+      });
     }
+  });
 
-    this.$buttons = this.$save = this.$cancel = undefined;
-    if ( option.buttons ) {
-      this.$save = $("<input>", {
-          type: "submit",
-          "class": "eip-save",
-          value: option.submitLabel
-        });
-      this.$cancel = $("<input>", {
-          type: "button",
-          "class": "eip-cancel",
-          value: option.cancelLabel
-        });
-      this.$buttons = $("<p class='eip-buttons'></p>")
-        .append(
-          this.$save,
-          this.$cancel
-        );
+  EIP.defineType('radio', {
+    init: function(eip) {
+      eip.eachDatalist(function(key, val) {
+        var attrs = eip.getInputAttrs({ type: 'radio', value: key });
+        var $input = $('<input>').attr(attrs);
+        var $span = $('<span>').text(val);
+        var $label = $('<label>').append($input, $span);
+
+        eip.$input.append($label);
+      });
+    },
+    renderHolder: function(eip) {
+      var $checked = eip.$input.find('input[type="radio"]:checked');
+      var val = $checked.closest('label').text();
+
+      eip.setHolder(val);
+    },
+    renderForm: function(eip) {
+      var val = eip.getHolderHtml();
+      eip.$input.find('label').each(function() {
+        var $label = $(this);
+        var $radio = $label.find('input[type="radio"]');
+        if ($.trim($label.find('span').html()) === $.trim(val)) {
+          $radio.prop('checked', true);
+          return false;
+        }
+      });
     }
+  });
 
-    // SetUp
-    this.setUp();
-  }
-  EIP.prototype = {
-    setUp: function() {
-      var _html = this.$elm.html();
-
-      this.$form
-        .append(this.$input);
-
-      if ( this.option.buttons ) {
-        this.$form
-          .append(this.$buttons);
-      }
-
-      this.$elm
-        .html("")
-        .append(
-          this.$holder.html(_html.replace(/\n|\r/g, "<br/>") || this.$defaultLabel),
-          this.$form.css("display", "none")
-        );
-
-      this.editable();
-    },
-    replaceInput: function() {
-      var _this = this;
-      this.$input.val( htmlUnescape(this.$elm.attr("data-eip-value")) );
-      this.$elm
-        .removeClass("eip-hover")
-        .addClass("eip-editing")
-        .unbind();
-
-      this.$holder
-        .css("display", "none");
-      this.$form
-        .css("display", "block");
-
-      this.$input
-        .css("width", this.$elm.width() - 20)
-        .focus()
-        .click(function(e) {
-          e.stopPropagation();
-        });
-
-      if ( !this.option.buttons ) {
-        this.$input
-          .blur(function() {
-            _this.submit();
-          });
-      } else {
-        this.$cancel
-          .click(function(e) {
-            _this.cancel();
-            e.stopPropagation();
-          });
-        this.$buttons.addClass("show");
-      }
-    },
-    replaceDefault: function(cancel) {
-      var _val = cancel ? this.$elm.attr("data-eip-value") : htmlEscape(this.$input.val());
-      var holder;
-      if ( this.eipType === "select" ) {
-        holder = this.$elm.find("option").filter(function() {
-          return $(this).attr("value") === _val;
-        }).text();
-      }
-      else if ( !_val || _val.length === 0 ) {
-        holder = this.$defaultLabel
-      }
-      else {
-        holder = _val.replace(/\n|\r/g, "<br/>");
-      }
-
-      this.$form.unbind();
-      this.$input.unbind();
-
-      if ( this.option.buttons ) {
-        this.$cancel.unbind();
-        this.$buttons.removeClass("show");
-      }
-
-      this.$elm
-        .removeClass("eip-editing")
-        .attr("data-eip-value", _val);
-      this.$holder
-        .html(holder)
-        .css("display", "block");
-      this.$form
-        .css("display", "none");
-
-      this.editable();
-    },
-    submit: function() {
-      var _opt = this.option;
-      this.replaceDefault();
-      if ( !$.isFunction(_opt.onsubmit) ) return;
-      _opt.onsubmit.call(this, this.$input.attr('name'), this.$input.val());
-    },
-    cancel: function() {
-      this.$elm.removeClass("eip-hover");
-      this.replaceDefault(true);
-    },
-    editable: function() {
-      var _this = this;
-      this.$form
-        .bind("submit", function(e) {
-          _this.submit();
-          e.preventDefault();
-        });
-      this.$elm
-        .hover(function() {
-          _this.$elm.addClass("eip-hover");
-        }, function() {
-          _this.$elm.removeClass("eip-hover");
-        })
-        .bind("click", function() {
-          _this.replaceInput();
-        });
-    }
-  }
-  function htmlUnescape(str) {
-    return $('<div>').html(str).text();
-  }
-  function htmlEscape(str) {
-    return $('<div>').text(str).html();
-  }
+  window.EIP = EIP;
 }(jQuery));
