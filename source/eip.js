@@ -6,7 +6,7 @@
  * @author       hokaccha (k.hokamura@gmail.com)
  * @copyright    5509 (http://5509.me/)
  * @license      The MIT License
- * @link         https://github.com/5509/EIP
+ * @link         https://github.com/pxgrid/jquery.eip
  *
  */
 ;(function($, undefined) {
