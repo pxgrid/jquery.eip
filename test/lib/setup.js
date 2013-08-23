@@ -1,5 +1,9 @@
 mocha.setup('bdd');
 
-$(function() {
-  mocha.run();
-});
+window.onload = function() {
+  if (window.mochaPhantomJS) {
+    mochaPhantomJS.run();
+  } else {
+    mocha.run();
+  }
+};

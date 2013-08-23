@@ -1,0 +1,10 @@
+language: node_js
+node_js:
+  - 0.8
+script: npm test
+env:
+  - JQUERY_VERSION=1.6.4
+  - JQUERY_VERSION=1.7.2
+  - JQUERY_VERSION=1.8.3
+  - JQUERY_VERSION=1.10.2
+  - JQUERY_VERSION=2.0.2

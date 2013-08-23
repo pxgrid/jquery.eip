@@ -1,0 +1,10 @@
+{
+  "name": "jquery.eip",
+  "version": "0.0.1",
+  "devDependencies": {
+    "mocha-phantomjs": "3.1.2"
+  },
+  "scripts": {
+    "test": "./node_modules/.bin/mocha-phantomjs test/index.html"
+  }
+}
